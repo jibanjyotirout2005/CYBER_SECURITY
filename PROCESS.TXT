@@ -1,0 +1,430 @@
+This is a **strong MCA research/project topic**. The key idea is that you should **train mainly on normal traffic and deliberately hide one attack type during training**, then test whether the model can detect that unseen attack.
+
+### Proposed project title
+
+**Zero-Day Attack Detection Using Unsupervised Anomaly Detection**
+
+### 1. Core problem
+
+Traditional supervised IDS models learn patterns from labeled attacks such as DoS, DDoS, brute force, botnet, etc. If a completely new attack appears, the model may not recognize it.
+
+Your project instead asks:
+
+> **Can an anomaly-detection model learn what “normal network behavior” looks like and identify an attack it has never seen before?**
+
+### 2. Recommended architecture
+
+I would structure your project like this:
+
+```text
+                 Network Traffic Dataset
+                          │
+                          ▼
+                Data Preprocessing
+                          │
+              ┌───────────┴───────────┐
+              ▼                       ▼
+        Feature Selection       Data Scaling
+              │                       │
+              └───────────┬───────────┘
+                          ▼
+                Normal Traffic Only
+                          │
+             ┌────────────┴────────────┐
+             ▼                         ▼
+        Autoencoder              Isolation Forest
+             │                         │
+             ▼                         ▼
+    Reconstruction Error          Anomaly Score
+             │                         │
+             └────────────┬────────────┘
+                          ▼
+                  Hybrid Detection
+                          │
+                          ▼
+                 Adaptive Threshold
+                          │
+                          ▼
+              Normal / Anomalous
+                          │
+                          ▼
+             Zero-Day Attack Detection
+```
+
+### 3. Experimental design
+
+This is the **most important part** of your research.
+
+Instead of randomly splitting all attack classes between training and testing, create an **unseen-attack experiment**.
+
+For example:
+
+| Dataset             | Training | Testing |
+| ------------------- | -------- | ------- |
+| Normal              | ✅        | ✅       |
+| DoS                 | ❌        | ✅       |
+| DDoS                | ❌        | ✅       |
+| Brute Force         | ❌        | ✅       |
+| Botnet              | ❌        | ✅       |
+| Other known attacks | ❌        | ✅       |
+
+For the strictest unsupervised experiment:
+
+**Training:**
+
+* Normal traffic only
+
+**Testing:**
+
+* Normal traffic
+* Known attacks
+* One deliberately held-out attack type
+
+The held-out attack acts as your **zero-day proxy**.
+
+For example:
+
+> Train without **Botnet** → test with Normal + DoS + DDoS + Botnet.
+
+Then repeat:
+
+> Train without DoS → test with Normal + other attacks + DoS.
+
+This gives you a much stronger research argument than simply training and testing on the same attack categories.
+
+---
+
+## 4. Models to compare
+
+Start with these five:
+
+### Baseline models
+
+**1. Isolation Forest**
+
+* Excellent starting point
+* Fast on large datasets
+* Doesn't require attack labels
+* Produces anomaly scores
+
+**2. One-Class SVM**
+
+* Learns the boundary of normal behavior
+* Useful comparison with Isolation Forest
+* Can become computationally expensive with large datasets
+
+**3. Local Outlier Factor**
+
+* Detects observations that are locally unusual
+* Useful as another classical baseline
+
+### Deep-learning models
+
+**4. Autoencoder**
+
+Train the network to reconstruct normal traffic:
+
+```text
+Input features
+      ↓
+ Encoder
+      ↓
+Latent representation
+      ↓
+ Decoder
+      ↓
+Reconstructed features
+```
+
+Normal traffic should have relatively low reconstruction error.
+
+An unusual attack should theoretically produce a larger reconstruction error.
+
+**5. Variational Autoencoder (VAE)**
+
+A VAE learns a probabilistic latent representation of normal traffic and can provide another way of measuring abnormality.
+
+---
+
+# 5. Your proposed hybrid model
+
+Your strongest experimental model can be:
+
+### **Autoencoder + Isolation Forest**
+
+Instead of relying on only one anomaly score:
+
+```text
+Network Features
+       │
+       ▼
+   Autoencoder
+       │
+       ├── Reconstruction Error
+       │
+       ▼
+Latent Representation
+       │
+       ▼
+Isolation Forest
+       │
+       ├── Isolation Anomaly Score
+       │
+       ▼
+   Score Fusion
+       │
+       ▼
+Adaptive Threshold
+       │
+       ▼
+Normal / Anomaly
+```
+
+This is a very reasonable research extension because the two methods capture different aspects of abnormality.
+
+* **Autoencoder:** How poorly can the traffic be reconstructed?
+* **Isolation Forest:** How isolated/unusual is the observation?
+* **Hybrid:** Combine both signals.
+
+---
+
+# 6. Adaptive threshold
+
+Don't simply choose an arbitrary threshold such as `0.5`.
+
+You can determine the threshold using **normal validation traffic**.
+
+For example:
+
+```text
+Normal validation data
+        ↓
+Calculate anomaly scores
+        ↓
+Determine score distribution
+        ↓
+Select threshold
+        ↓
+New traffic
+        ↓
+Score > threshold?
+      /       \
+    Yes        No
+     ↓          ↓
+  Anomaly     Normal
+```
+
+You can experiment with percentile-based thresholds such as the **95th, 97.5th, and 99th percentiles** of normal validation scores.
+
+That also gives you a useful **threshold vs detection-rate** experiment.
+
+genui{"learning_viz":{"type_id":"CLASSIFICATION_THRESHOLD","initial_values":{"threshold":0.8}}}
+
+---
+
+# 7. Dataset
+
+I would start with **CICIDS2017** because it gives you a manageable starting point and contains both benign and multiple attack categories.
+
+Then, if computational resources allow, validate your approach on another dataset such as:
+
+* UNSW-NB15
+* CSE-CIC-IDS2018
+
+The important thing is to avoid claiming that an attack is literally a real-world zero-day. Your experiment is a **zero-day simulation/proxy**, because you're treating an attack category withheld from training as an unseen attack.
+
+---
+
+# 8. Evaluation metrics
+
+Don't rely only on accuracy.
+
+You should report:
+
+| Metric                  | Why                                              |
+| ----------------------- | ------------------------------------------------ |
+| Precision               | How many detected anomalies are actually attacks |
+| Recall / Detection Rate | How many attacks were detected                   |
+| F1-score                | Balance between precision and recall             |
+| False Positive Rate     | How often normal traffic is incorrectly flagged  |
+| ROC-AUC                 | Overall discrimination                           |
+| PR-AUC                  | Useful when attacks are relatively rare          |
+| Zero-Day Detection Rate | Detection performance on the held-out attack     |
+| Detection Latency       | How quickly an anomaly can be identified         |
+
+For your research, **false-positive rate is particularly important**. An IDS that flags huge amounts of legitimate traffic won't be practically useful even if its attack detection rate looks high.
+
+---
+
+# 9. Graphs for your paper/PPT
+
+I recommend producing these:
+
+### Dataset analysis
+
+1. Attack-class distribution
+2. Normal vs attack traffic
+3. Feature correlation heatmap
+
+### Model analysis
+
+4. Autoencoder reconstruction-error distribution
+5. Isolation Forest anomaly-score distribution
+6. Normal vs anomalous score distribution
+7. ROC curves
+8. Precision-Recall curves
+9. Threshold vs detection rate
+10. False-positive rate comparison
+11. Zero-day detection rate by held-out attack
+12. Detection latency comparison
+
+### Final comparison
+
+You can create a table like:
+
+| Model              | FPR | Precision | Recall | F1 | Zero-Day Detection |
+| ------------------ | --: | --------: | -----: | -: | -----------------: |
+| Isolation Forest   |   — |         — |      — |  — |                  — |
+| One-Class SVM      |   — |         — |      — |  — |                  — |
+| LOF                |   — |         — |      — |  — |                  — |
+| Autoencoder        |   — |         — |      — |  — |                  — |
+| VAE                |   — |         — |      — |  — |                  — |
+| **Hybrid AE + IF** |   — |         — |      — |  — |                  — |
+
+Fill these values **only after running the experiments**.
+
+---
+
+# 10. Suggested implementation stack
+
+```text
+Python
+│
+├── Pandas          → dataset processing
+├── NumPy           → numerical operations
+├── Scikit-learn    → IF, One-Class SVM, LOF, metrics
+├── TensorFlow/Keras → Autoencoder/VAE
+├── Matplotlib      → graphs
+├── Seaborn         → statistical visualization
+└── SHAP            → optional explainability
+```
+
+You can implement everything initially in **Google Colab/Jupyter Notebook**, then convert the final pipeline into Python modules.
+
+---
+
+# 11. Recommended project phases
+
+### Phase 1 — Dataset
+
+* Download CICIDS2017
+* Understand attack classes
+* Combine CSV files
+* Remove irrelevant columns
+* Handle missing/infinite values
+
+### Phase 2 — Preprocessing
+
+* Remove duplicates
+* Encode categorical variables if required
+* Feature scaling
+* Handle extreme values
+* Select useful features
+
+### Phase 3 — Experimental split
+
+Create:
+
+```text
+Training:
+    Normal only
+
+Validation:
+    Normal only
+
+Testing:
+    Normal
+    Known attacks
+    Unseen attack
+```
+
+### Phase 4 — Classical models
+
+Implement:
+
+```text
+Isolation Forest
+One-Class SVM
+LOF
+```
+
+### Phase 5 — Deep learning
+
+Implement:
+
+```text
+Autoencoder
+VAE
+```
+
+### Phase 6 — Hybrid
+
+Implement:
+
+```text
+Autoencoder
+     +
+Isolation Forest
+     ↓
+Combined anomaly score
+     ↓
+Adaptive threshold
+```
+
+### Phase 7 — Evaluation
+
+Calculate:
+
+```text
+Precision
+Recall
+F1
+FPR
+ROC-AUC
+PR-AUC
+Zero-Day Detection Rate
+Detection Latency
+```
+
+### Phase 8 — Research analysis
+
+Answer:
+
+1. Which method detects unseen attacks?
+2. How does the hybrid method behave?
+3. How many false positives occur?
+4. Does performance change depending on the unseen attack?
+5. How does threshold selection affect detection?
+6. What is the computational/detection latency?
+
+---
+
+## 12. What makes this an MCA-level project
+
+Don't make the project simply:
+
+> **"I implemented Isolation Forest and Autoencoder."**
+
+Your actual research contribution should be closer to:
+
+> **"A comparative and hybrid unsupervised anomaly-detection framework was developed to identify network attacks withheld from the training data, using an Autoencoder and Isolation Forest with adaptive thresholding."**
+
+That gives you three meaningful components:
+
+**Comparison → Hybridization → Unseen-attack evaluation**
+
+And your central research question becomes:
+
+> **How effectively can unsupervised anomaly-detection techniques identify network attacks that are completely absent from the training data?**
+
+That is a much stronger framing for an MCA dissertation than a conventional attack-classification project.
